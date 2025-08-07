@@ -4,7 +4,7 @@ from app.schemas.user_schema import UserSchema
 from app import db, bcrypt
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 
-user_bp = Blueprint('users', __name__)
+user_bp = Blueprint('user', __name__)
 user_schema = UserSchema()
 
 @user_bp.route('/register', methods=['POST'])
@@ -21,7 +21,7 @@ def register():
     user = User(
         name=data['name'],
         email=data['email'],
-        password=hashed_password
+        password_hash=hashed_password
     )
 
     db.session.add(user)
@@ -31,11 +31,14 @@ def register():
 
 
 @user_bp.route('/login', methods=['POST'])
+# @cross_origin()
 def login():
     data = request.get_json()
+    # print("11111", data)
     user = User.query.filter_by(email=data['email']).first()
+    print("22222",user)
 
-    if not user or not bcrypt.check_password_hash(user.password, data['password']):
+    if not user or not bcrypt.check_password_hash(user.password_hash, data['password']):
         return jsonify({"error": "Invalid credentials"}), 401
 
     access_token = create_access_token(identity=user.id)
