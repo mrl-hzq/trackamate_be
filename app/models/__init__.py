@@ -1,6 +1,8 @@
 import uuid
 from datetime import datetime
-from sqlalchemy.dialects.mysql import ENUM, DECIMAL, TINYINT
+from sqlalchemy import (Column, String, Integer, DECIMAL, Text, Date, DateTime, Time, Enum, ForeignKey)
+from sqlalchemy.dialects.mysql import TINYINT
+from sqlalchemy.orm import relationship
 from app import db
 
 def generate_uuid():
@@ -8,109 +10,131 @@ def generate_uuid():
 
 class User(db.Model):
     __tablename__ = 'Users'
-    id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
-    email = db.Column(db.String(100), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
-    name = db.Column(db.String(100))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    email = Column(String(100), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    name = Column(String(100))
+    created_at = Column(DateTime, default=datetime.utcnow)
 
-    expenses = db.relationship('Expense', backref='user', lazy=True)
-    incomes = db.relationship('Income', backref='user', lazy=True)
-    meals = db.relationship('Meal', backref='user', lazy=True)
-    goals = db.relationship('Goal', backref='user', lazy=True)
-    reminders = db.relationship('Reminder', backref='user', lazy=True)
-    budgets = db.relationship('Budget', backref='user', lazy=True)
-
-class Expense(db.Model):
-    __tablename__ = 'Expenses'
-    id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
-    user_id = db.Column(db.String(36), db.ForeignKey('Users.id'))
-    category = db.Column(db.String(50))
-    amount = db.Column(DECIMAL(10, 2))
-    description = db.Column(db.Text)
-    expense_date = db.Column(db.Date)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    incomes = relationship('Income', backref='user', lazy=True, cascade="all, delete-orphan")
+    meals = relationship('Meal', backref='user', lazy=True, cascade="all, delete-orphan")
+    goals = relationship('Goal', backref='user', lazy=True, cascade="all, delete-orphan")
+    reminders = relationship('Reminder', backref='user', lazy=True, cascade="all, delete-orphan")
 
 
 class Income(db.Model):
     __tablename__ = 'Incomes'
-    id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
-    user_id = db.Column(db.String(36), db.ForeignKey('Users.id'))
-    source = db.Column(db.String(50))
-    amount = db.Column(DECIMAL(10, 2))
-    income_date = db.Column(db.Date)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey('Users.id'), nullable=False)
+    source = Column(String(50))
+    amount = Column(DECIMAL(10, 2))
+    photo_url = Column(Text)
+    burn_pool = Column(Integer)
+    daily_limit_food = Column(Integer)
+    daily_supply_food = Column(Integer)
+    daily_limit_burn = Column(Integer)
+    daily_supply_burn = Column(Integer)
+    income_date = Column(Date)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    burns = relationship('Burn', backref='income', lazy=True, cascade="all, delete-orphan")
+    invests = relationship('Invest', backref='income', lazy=True, cascade="all, delete-orphan")
+    commitments = relationship('Commitment', backref='income', lazy=True, cascade="all, delete-orphan")
+    food_expenses = relationship('FoodExpense', backref='income', lazy=True, cascade="all, delete-orphan")
+
+
+class Burn(db.Model):
+    __tablename__ = 'Burn'
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    income_id = Column(String(36), ForeignKey('Incomes.id'), nullable=False)
+    category = Column(Enum('Stupid', 'Health', 'Therapeutic', 'Tech'))
+    amount = Column(DECIMAL(10, 2))
+    description = Column(Text)
+    photo_url = Column(Text)
+    burn_date = Column(Date)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Invest(db.Model):
+    __tablename__ = 'Invest'
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    income_id = Column(String(36), ForeignKey('Incomes.id'), nullable=False)
+    category = Column(Enum('High Risks', 'Med Risks', 'Low Risks'))
+    amount = Column(DECIMAL(10, 2))
+    description = Column(Text)
+    is_done = Column(TINYINT(1), default=0)
+    is_recurring = Column(TINYINT(1), default=0)
+    photo_url = Column(Text)
+    invest_date = Column(Date)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Commitment(db.Model):
+    __tablename__ = 'Commitment'
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    income_id = Column(String(36), ForeignKey('Incomes.id'), nullable=False)
+    amount = Column(DECIMAL(10, 2))
+    description = Column(Text)
+    is_done = Column(TINYINT(1), default=0)
+    is_recurring = Column(TINYINT(1), default=0)
+    photo_url = Column(Text)
+    commit_date = Column(Date)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class FoodExpense(db.Model):
+    __tablename__ = 'FoodExpenses'
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    meals_id = Column(String(36), ForeignKey('Meals.id'), nullable=False)
+    income_id = Column(String(36), ForeignKey('Incomes.id'), nullable=False)
+    date = Column(Date, nullable=False)
+    amount = Column(DECIMAL(10, 2), nullable=False)
+    description = Column(String(255))
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Meal(db.Model):
     __tablename__ = 'Meals'
-    id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
-    user_id = db.Column(db.String(36), db.ForeignKey('Users.id'))
-    meal_type = db.Column(ENUM('breakfast', 'lunch', 'dinner', 'snack'))
-    description = db.Column(db.Text)
-    calories = db.Column(db.Integer)
-    protein = db.Column(DECIMAL(5, 2))
-    fat = db.Column(DECIMAL(5, 2))
-    carbs = db.Column(DECIMAL(5, 2))
-    meal_date = db.Column(db.Date)
-    photo_url = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey('Users.id'), nullable=False)
+    meal_type = Column(Enum('breakfast', 'lunch', 'dinner', 'snack'))
+    description = Column(Text)
+    calories = Column(Integer)
+    protein = Column(DECIMAL(5, 2))
+    fat = Column(DECIMAL(5, 2))
+    carbs = Column(DECIMAL(5, 2))
+    meal_date = Column(Date)
+    photo_url = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    food_expenses = relationship('FoodExpense', backref='meal', lazy=True, cascade="all, delete-orphan")
 
 
 class Goal(db.Model):
     __tablename__ = 'Goals'
-    id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
-    user_id = db.Column(db.String(36), db.ForeignKey('Users.id'))
-    goal_type = db.Column(ENUM('savings', 'calories', 'custom'))
-    target_value = db.Column(DECIMAL(10, 2))
-    current_value = db.Column(DECIMAL(10, 2))
-    start_date = db.Column(db.Date)
-    end_date = db.Column(db.Date)
-    description = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey('Users.id'), nullable=False)
+    goal_type = Column(Enum('savings', 'calories', 'custom'))
+    target_value = Column(DECIMAL(10, 2))
+    current_value = Column(DECIMAL(10, 2))
+    start_date = Column(Date)
+    end_date = Column(Date)
+    description = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Reminder(db.Model):
     __tablename__ = 'Reminders'
-    id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
-    user_id = db.Column(db.String(36), db.ForeignKey('Users.id'))
-    type = db.Column(ENUM('bill', 'meal', 'custom'))
-    message = db.Column(db.Text)
-    reminder_date = db.Column(db.Date)
-    reminder_time = db.Column(db.Time)
-    repeat_interval = db.Column(ENUM('none', 'daily', 'weekly', 'monthly'))
-    is_done = db.Column(TINYINT(1), default=0)
-    done_date = db.Column(db.DateTime, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-
-class Budget(db.Model):
-    __tablename__ = 'Budgets'
-    id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
-    user_id = db.Column(db.String(36), db.ForeignKey('Users.id'))
-    category = db.Column(db.String(50))
-    limit_amount = db.Column(DECIMAL(10, 2))
-    month_year = db.Column(db.String(7))  # Format: YYYY-MM
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-
-class FoodExpense(db.Model):
-    __tablename__ = 'food_expenses'
-
-    id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
-    user_id = db.Column(db.String(36), db.ForeignKey('Users.id'), nullable=False)  # match table name
-    date = db.Column(db.Date, nullable=False)
-    amount = db.Column(DECIMAL(10, 2), nullable=False)
-    description = db.Column(db.String(255), nullable=True)
-
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    # Relationship back to User
-    user = db.relationship('User', backref=db.backref('food_expenses', lazy=True))
-
-    def __repr__(self):
-        return f"<FoodExpense {self.date} RM {self.amount}>"
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey('Users.id'), nullable=False)
+    type = Column(Enum('bill', 'meal', 'custom'))
+    message = Column(Text)
+    reminder_date = Column(Date)
+    reminder_time = Column(Time)
+    repeat_interval = Column(Enum('none', 'daily', 'weekly', 'monthly'))
+    is_done = Column(TINYINT(1), default=0)
+    done_date = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 
