@@ -6,22 +6,20 @@ from app import db
 def generate_uuid():
     return str(uuid.uuid4())
 
+class User(db.Model):
+    __tablename__ = 'Users'
+    id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
+    email = db.Column(db.String(100), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    name = db.Column(db.String(100))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-# class User(db.Model):
-#     __tablename__ = 'Users'
-#     id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
-#     email = db.Column(db.String(100), unique=True, nullable=False)
-#     password_hash = db.Column(db.String(255), nullable=False)
-#     name = db.Column(db.String(100))
-#     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-#
-#     expenses = db.relationship('Expense', backref='user', lazy=True)
-#     incomes = db.relationship('Income', backref='user', lazy=True)
-#     meals = db.relationship('Meal', backref='user', lazy=True)
-#     goals = db.relationship('Goal', backref='user', lazy=True)
-#     reminders = db.relationship('Reminder', backref='user', lazy=True)
-#     budgets = db.relationship('Budget', backref='user', lazy=True)
-
+    expenses = db.relationship('Expense', backref='user', lazy=True)
+    incomes = db.relationship('Income', backref='user', lazy=True)
+    meals = db.relationship('Meal', backref='user', lazy=True)
+    goals = db.relationship('Goal', backref='user', lazy=True)
+    reminders = db.relationship('Reminder', backref='user', lazy=True)
+    budgets = db.relationship('Budget', backref='user', lazy=True)
 
 class Expense(db.Model):
     __tablename__ = 'Expenses'
@@ -96,11 +94,23 @@ class Budget(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
-class MealExpenseMap(db.Model):
-    __tablename__ = 'MealExpenseMap'
+class FoodExpense(db.Model):
+    __tablename__ = 'food_expenses'
+
     id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
-    user_id = db.Column(db.String(36), db.ForeignKey('Users.id'))
-    meal_id = db.Column(db.String(36), db.ForeignKey('Meals.id'))
-    expense_id = db.Column(db.String(36), db.ForeignKey('Expenses.id'))
-    estimated_cost = db.Column(DECIMAL(10, 2))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    user_id = db.Column(db.String(36), db.ForeignKey('Users.id'), nullable=False)  # match table name
+    date = db.Column(db.Date, nullable=False)
+    amount = db.Column(DECIMAL(10, 2), nullable=False)
+    description = db.Column(db.String(255), nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationship back to User
+    user = db.relationship('User', backref=db.backref('food_expenses', lazy=True))
+
+    def __repr__(self):
+        return f"<FoodExpense {self.date} RM {self.amount}>"
+
+
+

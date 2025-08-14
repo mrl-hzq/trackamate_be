@@ -19,7 +19,10 @@ def create_app():
     jwt.init_app(app)
     bcrypt.init_app(app)
 
-    from .routes.user_routes import user_bp
+    from app.views.auth import user_bp
     app.register_blueprint(user_bp, url_prefix="/user")
+
+    from app.views.food import food_bp
+    app.register_blueprint(food_bp, url_prefix="/food")
 
     return app
