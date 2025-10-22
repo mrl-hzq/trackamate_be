@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from app.models import *
 from app import db
 from decimal import Decimal
+from sqlalchemy import desc
 
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 
@@ -66,6 +67,7 @@ def add_meal():
     data = request.json
 
     try:
+        user_id = data.get("user_id")
         commit_id = data.get("commit_id")  # optional
         burn_id = data.get("burn_id")  # optional
         meal_type = data.get("meal_type")
@@ -86,7 +88,14 @@ def add_meal():
             if not commitment:
                 return jsonify({"error": "Commitment not found"}), 404
 
+        # If burn_id is provided, check it exists
+        if burn_id:
+            burn = Burn.query.get(burn_id)
+            if not burn:
+                return jsonify({"error": "Burn not found"}), 404
+
         new_meal = Meal(
+            user_id=user_id,
             commit_id=commit_id,
             burn_id=burn_id,
             meal_type=meal_type,
@@ -183,4 +192,38 @@ def edit_meal(meal_id):
 
     except Exception as e:
         db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@food_bp.route('/get_food/<string:user_id>', methods=['GET'])
+def get_foods(user_id):
+    try:
+        meals = Meal.query.filter_by(user_id=user_id).order_by(desc(Meal.meal_date)).all()
+
+        if not meals:
+            return jsonify({"message": "No meals found for this user"}), 404
+
+        meals_list = []
+        for meal in meals:
+            meals_list.append({
+                "id": meal.id,
+                "user_id": meal.user_id,
+                          "commit_id": meal.commit_id,
+                "burn_id": meal.burn_id,
+                "meal_type": meal.meal_type,
+                "reply_description": meal.reply_description,
+                "calories": meal.calories,
+                "protein": str(meal.protein) if meal.protein else None,
+                "fat": str(meal.fat) if meal.fat else None,
+                "carbs": str(meal.carbs) if meal.carbs else None,
+                "meal_date": str(meal.meal_date),
+                "photo_url": meal.photo_url,
+                "created_at": str(meal.created_at)
+            })
+
+        return jsonify({
+            "meals": meals_list,
+            "count": len(meals_list)
+        }), 200
+
+    except Exception as e:
         return jsonify({"error": str(e)}), 500

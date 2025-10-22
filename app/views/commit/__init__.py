@@ -43,6 +43,7 @@ def get_available_to_commit(user_id):
 @commit_bp.route('/add_commit', methods=['POST'])
 def add_commitment():
     data = request.json
+    print(data)
     user_id = data.get("user_id")
     amount = data.get("amount")
     category = data.get("category")
@@ -160,6 +161,25 @@ def edit_commitment(commit_id):
                 "commit_date": str(commit.commit_date),
                 "created_at": str(commit.created_at)
             }
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@commit_bp.route('/delete_commit/<string:commit_id>', methods=['DELETE'])
+def delete_commitment(commit_id):
+    try:
+        commit = Commitment.query.get(commit_id)
+        if not commit:
+            return jsonify({"error": "Commitment record not found"}), 404
+
+        db.session.delete(commit)
+        db.session.commit()
+
+        return jsonify({
+            "message": "Commitment deleted successfully",
+            "commitment_id": commit_id
         }), 200
 
     except Exception as e:

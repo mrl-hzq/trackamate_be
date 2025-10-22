@@ -48,7 +48,7 @@ class Burn(db.Model):
     __tablename__ = 'burns'
     id = Column(String(36), primary_key=True, default=generate_uuid)
     income_id = Column(String(36), ForeignKey('incomes.id'), nullable=False)
-    category = Column(Enum('Stupid', 'Health', 'Therapeutic', 'Tech'))
+    category = Column(Enum('Stupid', 'Health', 'Therapeutic', 'Tech', '1year', 'fam', 'normal'))
     amount = Column(DECIMAL(10, 2))
     description = Column(Text)
     photo_url = Column(Text)
@@ -75,7 +75,7 @@ class Commitment(db.Model):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     income_id = Column(String(36), ForeignKey('incomes.id'), nullable=False)
     amount = Column(DECIMAL(10, 2))
-    category = Column(Enum('Daily Food', 'Groceries', 'Transport', 'Home', 'PAMA'))
+    category = Column(Enum('Daily Food', 'Groceries', 'Transport', 'Home', 'PAMA', 'Perlindungan'))
     description = Column(Text)
     is_done = Column(Boolean, default=False)
     is_recurring = Column(Boolean, default=False)
@@ -89,8 +89,9 @@ class Commitment(db.Model):
 class Meal(db.Model):
     __tablename__ = 'meals'
     id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey('Users.id'), nullable=False)
     commit_id = Column(String(36), ForeignKey('commitments.id'), nullable=True)
-    burn_id = Column(String(36), ForeignKey('burn.id'), nullable=True)
+    burn_id = Column(String(36), ForeignKey('burns.id'), nullable=True)
     meal_type = Column(Enum('breakfast', 'lunch', 'dinner', 'snack'))
     reply_description = Column(Text)
     calories = Column(Integer)

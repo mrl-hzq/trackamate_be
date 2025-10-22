@@ -132,6 +132,25 @@ def edit_invest(invest_id):
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
+@invest_bp.route('/delete_invest/<string:invest_id>', methods=['DELETE'])
+def delete_invest(invest_id):
+    try:
+        invest = Invest.query.get(invest_id)
+        if not invest:
+            return jsonify({"error": "Investment record not found"}), 404
+
+        db.session.delete(invest)
+        db.session.commit()
+
+        return jsonify({
+            "message": "Investment deleted successfully",
+            "invest_id": invest_id
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
 @invest_bp.route('/total_invest/<string:user_id>', methods=['GET'])
 def total_invest(user_id):
     try:

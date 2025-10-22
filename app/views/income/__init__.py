@@ -84,6 +84,8 @@ def get_income_pools(user_id):
             return jsonify({"error": "No income record found for this user in current cycle"}), 404
 
         # Sum up pools
+        # total_income = Income.amount
+        total_income = sum(i.amount for i in incomes if i.amount)
         total_burn = sum(i.burn_pool for i in incomes if i.burn_pool)
         total_invest = sum(i.invest_pool for i in incomes if i.invest_pool)
         total_commit = sum(i.commit_pool for i in incomes if i.commit_pool)
@@ -92,6 +94,7 @@ def get_income_pools(user_id):
             "user_id": user_id,
             "cycle_start": start_date.strftime('%Y-%m-%d'),
             "cycle_end": end_date.strftime('%Y-%m-%d'),
+            "income": total_income,
             "burn_pool": total_burn,
             "invest_pool": total_invest,
             "commit_pool": total_commit

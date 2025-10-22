@@ -220,3 +220,22 @@ def update_burn(id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+@burn_bp.route('/delete_burn/<string:id>', methods=['DELETE'])
+def delete_burn(id):
+    try:
+        burn = Burn.query.get(id)
+        if not burn:
+            return jsonify({"error": "Burn record not found"}), 404
+
+        db.session.delete(burn)
+        db.session.commit()
+
+        return jsonify({
+            "message": "Burn record deleted successfully",
+            "burn_id": id
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
