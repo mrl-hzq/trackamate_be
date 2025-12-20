@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(dir /s C:Homelabtrackamate_be)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(if not exist \"uploads\" mkdir uploads)",
+      "Bash(if not exist \"uploads\\burn\" mkdir uploadsburn)",
+      "Bash(if not exist \"uploads\\invest\" mkdir uploadsinvest)",
+      "Bash(if not exist \"uploads\\commit\" mkdir uploadscommit)",
+      "Bash(dir:*)",
+      "Bash(mkdir:*)",
+      "Bash(if not exist \"uploads\\food\" mkdir uploadsfood)"
     ],
     "deny": [],
     "ask": []

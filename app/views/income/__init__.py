@@ -103,3 +103,115 @@ def get_income_pools(user_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# Update an existing income
+@income_bp.route('/edit_income/<int:income_id>', methods=['PUT'])
+def edit_income(income_id):
+    try:
+        income = Income.query.filter_by(id=income_id).first()
+
+        if not income:
+            return jsonify({"error": "Income not found"}), 404
+
+        data = request.get_json()
+
+        # Update amount if provided and recalculate pools
+        if 'amount' in data:
+            amount = float(data.get('amount'))
+
+            # Recalculate raw splits
+            burn_raw = amount * 0.2
+            invest_raw = amount * 0.3
+            commit_raw = amount * 0.5
+
+            # Round down to whole numbers
+            burn_pool = math.floor(burn_raw)
+            invest_pool = math.floor(invest_raw)
+            commit_pool = math.floor(commit_raw)
+
+            # Fix rounding difference
+            total_allocated = burn_pool + invest_pool + commit_pool
+            difference = round(amount - total_allocated)
+            commit_pool += difference
+
+            income.amount = amount
+            income.burn_pool = burn_pool
+            income.invest_pool = invest_pool
+            income.commit_pool = commit_pool
+
+        # Update other fields if provided
+        if 'source' in data:
+            income.source = data.get('source')
+
+        if 'income_date' in data:
+            income.income_date = datetime.strptime(data.get('income_date'), '%Y-%m-%d').date()
+
+        db.session.commit()
+
+        return jsonify({
+            "message": "Income updated successfully",
+            "income": {
+                "id": income.id,
+                "user_id": income.user_id,
+                "source": income.source,
+                "amount": str(income.amount),
+                "burn_pool": income.burn_pool,
+                "invest_pool": income.invest_pool,
+                "commit_pool": income.commit_pool,
+                "income_date": income.income_date.isoformat() if income.income_date else None,
+                "created_at": income.created_at.isoformat()
+            }
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 400
+
+# Get list of incomes in current pay cycle
+@income_bp.route('/get_incomes/<string:user_id>', methods=['GET'])
+def get_incomes(user_id):
+    try:
+        today = datetime.today()
+        start_date, end_date = get_salary_cycle(today)
+
+        # Query incomes in the cycle
+        incomes = (
+            Income.query
+            .filter(
+                Income.user_id == user_id,
+                Income.income_date >= start_date,
+                Income.income_date <= end_date
+            )
+            .order_by(Income.income_date.desc())
+            .all()
+        )
+
+        if not incomes:
+            return jsonify({
+                "user_id": user_id,
+                "cycle_start": start_date.strftime('%Y-%m-%d'),
+                "cycle_end": end_date.strftime('%Y-%m-%d'),
+                "incomes": []
+            }), 200
+
+        income_list = [{
+            "id": income.id,
+            "user_id": income.user_id,
+            "source": income.source,
+            "amount": str(income.amount),
+            "burn_pool": income.burn_pool,
+            "invest_pool": income.invest_pool,
+            "commit_pool": income.commit_pool,
+            "income_date": income.income_date.isoformat() if income.income_date else None,
+            "created_at": income.created_at.isoformat()
+        } for income in incomes]
+
+        return jsonify({
+            "user_id": user_id,
+            "cycle_start": start_date.strftime('%Y-%m-%d'),
+            "cycle_end": end_date.strftime('%Y-%m-%d'),
+            "incomes": income_list
+        }), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+

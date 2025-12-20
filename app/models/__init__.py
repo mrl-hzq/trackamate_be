@@ -23,7 +23,10 @@ class User(db.Model):
 
     incomes = relationship('Income', backref='user', lazy=True, cascade="all, delete-orphan")
     goals = relationship('Goal', backref='user', lazy=True, cascade="all, delete-orphan")
-    reminders = relationship('Reminder', backref='user', lazy=True, cascade="all, delete-orphan")
+    notes = relationship('Note', backref='user', lazy=True, cascade="all, delete-orphan")
+    weight_entries = relationship('WeightEntry', backref='user', lazy='dynamic', cascade="all, delete-orphan")
+    weight_goal = relationship('WeightGoal', backref='user', uselist=False, cascade="all, delete-orphan")
+    nutrition_reviews = relationship('NutritionReview', backref='user', lazy='dynamic', cascade="all, delete-orphan")
 
 
 class Income(db.Model):
@@ -54,6 +57,8 @@ class Burn(db.Model):
     photo_url = Column(Text)
     burn_date = Column(Date)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    meals = relationship('Meal', backref='burn', lazy=True, cascade="all, delete-orphan")
 
 
 class Invest(db.Model):
@@ -96,11 +101,12 @@ class Meal(db.Model):
     reply_description = Column(Text)
     calories = Column(Integer)
     protein = Column(DECIMAL(5, 2))
-    created_at = Column(DateTime, default=datetime.utcnow)
     fat = Column(DECIMAL(5, 2))
     carbs = Column(DECIMAL(5, 2))
     meal_date = Column(Date)
+    meal_time = Column(Time, nullable=True)
     photo_url = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Goal(db.Model):
@@ -116,15 +122,117 @@ class Goal(db.Model):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-class Reminder(db.Model):
-    __tablename__ = 'reminders'
+class Note(db.Model):
+    __tablename__ = 'notes'
     id = Column(String(36), primary_key=True, default=generate_uuid)
     user_id = Column(String(36), ForeignKey('Users.id'), nullable=False)
-    type = Column(Enum('bill', 'meal', 'custom'))
-    message = Column(Text)
-    reminder_date = Column(Date)
-    reminder_time = Column(Time)
-    repeat_interval = Column(Enum('none', 'daily', 'weekly', 'monthly'))
+    title = Column(String(200), nullable=False)
+    content = Column(Text, nullable=False)
+    category = Column(String(50))
+    note_type = Column(Enum('one-time', 'recurring'), nullable=False)
+    recurrence_interval_days = Column(Integer)
+    last_reset_date = Column(Date)
+    next_due_date = Column(Date)
     is_done = Column(Boolean, default=False)
     done_date = Column(DateTime)
+    burn_id = Column(String(36), ForeignKey('burns.id', ondelete='SET NULL'))
+    invest_id = Column(String(36), ForeignKey('invests.id', ondelete='SET NULL'))
+    commitment_id = Column(String(36), ForeignKey('commitments.id', ondelete='SET NULL'))
+    notification_enabled = Column(Boolean, default=False)
+    notification_type = Column(String(20))
+    notification_datetime = Column(DateTime)
+    notification_minutes_before = Column(Integer)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, onupdate=datetime.utcnow)
+
+
+class WeightEntry(db.Model):
+    __tablename__ = 'weight_entries'
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey('Users.id'), nullable=False)
+    weight_kg = Column(DECIMAL(5, 2), nullable=False)
+    date = Column(Date, nullable=False)
+    notes = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'weight_kg': float(self.weight_kg),
+            'date': self.date.isoformat(),
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat()
+        }
+
+
+class WeightGoal(db.Model):
+    __tablename__ = 'weight_goals'
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey('Users.id'), nullable=False, unique=True)
+    starting_weight = Column(DECIMAL(5, 2), nullable=False)
+    current_weight = Column(DECIMAL(5, 2), nullable=False)
+    goal_weight = Column(DECIMAL(5, 2), nullable=False)
+    height_cm = Column(Integer, nullable=False)
+    target_date = Column(Date, nullable=False)
+    current_phase = Column(Enum('priming', 'fat_loss', 'diet_break', 'final_push'), default='priming')
+    phase_start_date = Column(Date, nullable=False)
+    daily_calorie_target = Column(Integer, nullable=False)
+    daily_protein_target = Column(Integer, nullable=False)
+    daily_carbs_target = Column(Integer)
+    daily_fat_target = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'starting_weight': float(self.starting_weight),
+            'current_weight': float(self.current_weight),
+            'goal_weight': float(self.goal_weight),
+            'height_cm': self.height_cm,
+            'target_date': self.target_date.isoformat(),
+            'current_phase': self.current_phase,
+            'phase_start_date': self.phase_start_date.isoformat(),
+            'daily_calorie_target': self.daily_calorie_target,
+            'daily_protein_target': self.daily_protein_target,
+            'daily_carbs_target': self.daily_carbs_target,
+            'daily_fat_target': self.daily_fat_target,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class NutritionReview(db.Model):
+    __tablename__ = 'nutrition_reviews'
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey('Users.id'), nullable=False)
+    review_date = Column(Date, nullable=False)
+    total_calories = Column(Integer, nullable=False)
+    total_protein = Column(DECIMAL(5, 2), nullable=False)
+    total_carbs = Column(DECIMAL(5, 2), nullable=False)
+    total_fat = Column(DECIMAL(5, 2), nullable=False)
+    calorie_target = Column(Integer, nullable=False)
+    protein_target = Column(Integer, nullable=False)
+    adherence_score = Column(Integer)
+    ai_feedback = Column(Text, nullable=False)
+    grade = Column(String(2))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'review_date': self.review_date.isoformat(),
+            'total_calories': self.total_calories,
+            'total_protein': float(self.total_protein),
+            'total_carbs': float(self.total_carbs),
+            'total_fat': float(self.total_fat),
+            'calorie_target': self.calorie_target,
+            'protein_target': self.protein_target,
+            'adherence_score': self.adherence_score,
+            'ai_feedback': self.ai_feedback,
+            'grade': self.grade,
+            'created_at': self.created_at.isoformat()
+        }

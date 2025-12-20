@@ -56,3 +56,36 @@ def get_available_to_invest(user_id):
 
     available_to_invest = invest_pool - float(total_invested or 0)
     return income, available_to_invest, (start_date, end_date)
+
+
+def get_available_to_burn(user_id):
+    today = datetime.today()
+    start_date, end_date = get_salary_cycle(today)
+
+    income = (
+        Income.query.filter(
+            Income.user_id == user_id,
+            Income.income_date >= start_date,
+            Income.income_date <= end_date
+        )
+        .order_by(Income.income_date.desc())
+        .first()
+    )
+
+    if not income:
+        return None, None, None
+
+    burn_pool = float(income.burn_pool) if income.burn_pool else 0.0
+
+    total_burned = (
+        db.session.query(func.coalesce(func.sum(Burn.amount), 0))
+        .filter(
+            Burn.income_id == income.id,
+            Burn.burn_date >= start_date,
+            Burn.burn_date <= end_date
+        )
+        .scalar()
+    )
+
+    available_to_burn = burn_pool - float(total_burned or 0)
+    return income, available_to_burn, (start_date, end_date)

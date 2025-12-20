@@ -23,7 +23,11 @@
 - Discretionary spending (burn) management
 - Investment tracking
 - Committed expenses (bills, groceries, etc.)
-- Meal and nutrition tracking
+- Meal and nutrition tracking with AI-powered analysis
+- **Weight management system** with goal tracking and phase-based nutrition targets
+- **Daily nutrition reviews** with automated grading and feedback
+- **Intermittent fasting compliance** tracking
+- **Plateau detection** with personalized recommendations
 - Goals and reminders
 - Salary cycle-based financial tracking (25th to 24th)
 
@@ -63,7 +67,7 @@ trackamate_be/
 ├── app/                          # Main application package
 │   ├── __init__.py              # Flask app factory (create_app)
 │   ├── models/                  # SQLAlchemy database models
-│   │   └── __init__.py         # User, Income, Burn, Invest, Commitment, Meal, Goal, Reminder
+│   │   └── __init__.py         # User, Income, Burn, Invest, Commitment, Meal, Goal, Reminder, WeightGoal, WeightEntry, NutritionReview
 │   ├── schemas/                 # Marshmallow validation schemas
 │   │   └── user_schema.py
 │   └── views/                   # Blueprint route handlers
@@ -79,6 +83,8 @@ trackamate_be/
 │       │   └── __init__.py
 │       ├── commit/              # Committed expenses endpoints
 │       │   └── __init__.py
+│       ├── weight/              # Weight management endpoints
+│       │   └── __init__.py     # /setup-goal, /entry, /daily-review, /weekly-summary, /plateau-check, /meal-timing
 │       └── utils/               # Shared utility functions
 │           └── __init__.py     # get_salary_cycle, get_available_to_invest
 ├── config.py                    # Configuration class (loads from .env)
@@ -244,12 +250,15 @@ All models use UUID (string 36 chars) as primary keys. Foreign keys reference pa
 | fat | DECIMAL(5,2) | Fat in grams |
 | carbs | DECIMAL(5,2) | Carbohydrates in grams |
 | meal_date | Date | Date of meal |
+| meal_time | Time Nullable | **NEW** Actual time meal was consumed (HH:MM:SS) |
 | photo_url | Text | Food photo URL |
 | created_at | DateTime | Record creation timestamp |
 
 **Relationships**:
 - Belongs to: `user`
 - Optionally belongs to: `commitment` or `burn`
+
+**Note**: `meal_time` field added to track actual meal consumption time separately from record creation time (`created_at`). This enables accurate meal timing analysis for intermittent fasting tracking.
 
 ---
 
@@ -287,6 +296,79 @@ All models use UUID (string 36 chars) as primary keys. Foreign keys reference pa
 | repeat_interval | Enum | 'none', 'daily', 'weekly', 'monthly' |
 | is_done | Boolean | Reminder completed |
 | done_date | DateTime | Completion timestamp |
+| created_at | DateTime | Record creation timestamp |
+
+**Relationships**:
+- Belongs to: `user`
+
+---
+
+### WeightGoal Model
+**Table**: `weight_goals`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | String(36) PK | UUID primary key |
+| user_id | String(36) FK Unique | References Users.id (one goal per user) |
+| starting_weight | DECIMAL(5,2) | Initial weight in kg |
+| current_weight | DECIMAL(5,2) | Current weight in kg |
+| goal_weight | DECIMAL(5,2) | Target weight in kg |
+| height_cm | Integer | Height in centimeters |
+| target_date | Date | Goal completion date |
+| current_phase | Enum | 'priming', 'fat_loss', 'diet_break', 'final_push' |
+| phase_start_date | Date | When current phase started |
+| daily_calorie_target | Integer | Daily calorie goal |
+| daily_protein_target | Integer | Daily protein goal (grams) |
+| daily_carbs_target | Integer Nullable | Daily carbs goal (grams) |
+| daily_fat_target | Integer Nullable | Daily fat goal (grams) |
+| created_at | DateTime | Record creation timestamp |
+| updated_at | DateTime | Last update timestamp |
+
+**Relationships**:
+- Belongs to: `user` (one-to-one)
+
+**Phases**:
+- **priming**: Initial 2-4 weeks, body adaptation
+- **fat_loss**: Active weight loss phase
+- **diet_break**: 1-2 weeks eating at maintenance
+- **final_push**: Final weeks to reach goal
+
+---
+
+### WeightEntry Model
+**Table**: `weight_entries`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | String(36) PK | UUID primary key |
+| user_id | String(36) FK | References Users.id |
+| weight_kg | DECIMAL(5,2) | Weight measurement in kg |
+| date | Date | Measurement date |
+| notes | Text Nullable | Optional notes |
+| created_at | DateTime | Record creation timestamp |
+
+**Relationships**:
+- Belongs to: `user`
+
+---
+
+### NutritionReview Model
+**Table**: `nutrition_reviews`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | String(36) PK | UUID primary key |
+| user_id | String(36) FK | References Users.id |
+| review_date | Date | Date being reviewed |
+| total_calories | Integer | Total calories consumed |
+| total_protein | DECIMAL(5,2) | Total protein (grams) |
+| total_carbs | DECIMAL(5,2) | Total carbs (grams) |
+| total_fat | DECIMAL(5,2) | Total fat (grams) |
+| calorie_target | Integer | Target calories for that day |
+| protein_target | Integer | Target protein for that day |
+| adherence_score | Integer Nullable | Compliance score (0-100) |
+| ai_feedback | Text | Generated feedback |
+| grade | String(2) Nullable | Grade (A, B, C, D, F) |
 | created_at | DateTime | Record creation timestamp |
 
 **Relationships**:
@@ -651,6 +733,313 @@ View food settings.
 
 ---
 
+### Weight Management (`/weight`)
+
+#### POST /weight/setup-goal
+Initial setup for weight loss journey. Creates weight goal with calculated macro targets.
+
+**Request Body**:
+```json
+{
+  "user_id": "user-uuid",
+  "starting_weight": 85.5,
+  "goal_weight": 75.0,
+  "height_cm": 175,
+  "target_date": "2025-06-01"
+}
+```
+
+**Response** (201):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "goal-uuid",
+    "user_id": "user-uuid",
+    "starting_weight": 85.5,
+    "current_weight": 85.5,
+    "goal_weight": 75.0,
+    "height_cm": 175,
+    "target_date": "2025-06-01",
+    "current_phase": "priming",
+    "phase_start_date": "2025-12-03",
+    "daily_calorie_target": 1800,
+    "daily_protein_target": 150,
+    "phases": [...]
+  }
+}
+```
+
+---
+
+#### POST /weight/entry
+Add a weight measurement.
+
+**Request Body**:
+```json
+{
+  "user_id": "user-uuid",
+  "weight_kg": 84.2,
+  "date": "2025-12-03",
+  "notes": "Morning weight"
+}
+```
+
+**Response** (201):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "entry-uuid",
+    "user_id": "user-uuid",
+    "weight_kg": 84.2,
+    "date": "2025-12-03",
+    "notes": "Morning weight",
+    "created_at": "2025-12-03T07:30:00"
+  }
+}
+```
+
+---
+
+#### GET /weight/entries/:user_id
+Get weight entries for a user.
+
+**Query Params**:
+- `limit` (optional): Number of entries (default: 30)
+- `start_date` (optional): Filter from date (YYYY-MM-DD)
+- `end_date` (optional): Filter to date (YYYY-MM-DD)
+
+**Response** (200):
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "entry-uuid",
+      "weight_kg": 84.2,
+      "date": "2025-12-03",
+      "notes": "Morning weight"
+    }
+  ],
+  "count": 15
+}
+```
+
+---
+
+#### GET /weight/trend/:user_id
+Get weight trend data for charts.
+
+**Query Params**:
+- `days` (optional): Number of days (default: 30)
+
+**Response** (200):
+```json
+{
+  "success": true,
+  "data": {
+    "entries": [
+      {"date": "2025-11-03", "weight_kg": 85.5},
+      {"date": "2025-11-10", "weight_kg": 84.8}
+    ],
+    "trend": "decreasing",
+    "avg_weekly_loss": -0.5,
+    "total_loss": -1.3
+  }
+}
+```
+
+---
+
+#### GET /weight/goal/:user_id
+Get weight goal for a user.
+
+**Response** (200):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "goal-uuid",
+    "current_weight": 84.2,
+    "goal_weight": 75.0,
+    "daily_calorie_target": 1800,
+    "daily_protein_target": 150,
+    "current_phase": "fat_loss"
+  }
+}
+```
+
+---
+
+#### GET /weight/current-phase/:user_id
+Get current phase information and nutrition targets.
+
+**Response** (200):
+```json
+{
+  "success": true,
+  "data": {
+    "current_phase": "fat_loss",
+    "phase_description": "Active weight loss phase",
+    "daily_calorie_target": 1800,
+    "daily_protein_target": 150,
+    "daily_carbs_target": 180,
+    "daily_fat_target": 60,
+    "current_weight": 84.2,
+    "goal_weight": 75.0,
+    "weight_lost": 1.3,
+    "weight_remaining": 9.2
+  }
+}
+```
+
+---
+
+#### PUT /weight/update-phase
+Manually update phase (for diet breaks, transitions).
+
+**Request Body**:
+```json
+{
+  "user_id": "user-uuid",
+  "new_phase": "diet_break",
+  "daily_calorie_target": 2200,
+  "daily_protein_target": 150
+}
+```
+
+**Response** (200):
+```json
+{
+  "success": true,
+  "data": {
+    "current_phase": "diet_break",
+    "phase_start_date": "2025-12-03"
+  }
+}
+```
+
+---
+
+#### GET /weight/daily-review/:user_id
+Get daily nutrition review with AI feedback and grade.
+
+**Query Params**:
+- `date` (optional): Date to review (YYYY-MM-DD, default: today)
+
+**Response** (200):
+```json
+{
+  "success": true,
+  "data": {
+    "date": "2025-12-03",
+    "total_calories": 1850,
+    "total_protein": 145,
+    "total_carbs": 180,
+    "total_fat": 65,
+    "calorie_target": 1800,
+    "protein_target": 150,
+    "calorie_variance": 50,
+    "protein_variance": -5,
+    "grade": "B",
+    "ai_feedback": "You're 50 kcal over target. Protein intake is spot on! Keep up the great work!"
+  }
+}
+```
+
+**Grading System**:
+- **Grade A**: Both calories and protein within ±5% of targets
+- **Grade B**: Both within ±10% of targets
+- **Grade C**: Both within ±20% of targets
+- **Grade D**: Both within ±30% of targets
+- **Grade F**: Either metric more than 30% off target
+
+---
+
+#### GET /weight/weekly-summary/:user_id
+Get weekly aggregated nutrition statistics.
+
+**Query Params**:
+- `weeks` (optional): Number of weeks (2, 4, or 8, default: 4)
+
+**Response** (200):
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "week_start": "2025-11-04",
+      "week_end": "2025-11-10",
+      "avg_calories": 1820,
+      "avg_protein": 148,
+      "avg_carbs": 175,
+      "avg_fat": 62,
+      "target_calories": 1800,
+      "target_protein": 150,
+      "compliance_rate": 92.5
+    }
+  ]
+}
+```
+
+**Compliance Rate**: Percentage of days where both calories AND protein are within ±10% of targets.
+
+---
+
+#### GET /weight/plateau-check/:user_id
+Detect if weight loss has plateaued and provide recommendations.
+
+**Response** (200):
+```json
+{
+  "success": true,
+  "data": {
+    "is_plateau": true,
+    "weeks_stalled": 3,
+    "last_weight_change": 0.2,
+    "recommendation": "Your weight has been stable for 3 weeks. Consider implementing a refeed day (eating at maintenance calories) or adding 30 minutes of cardio 3x per week to break through this plateau."
+  }
+}
+```
+
+**Plateau Detection**: 3+ consecutive weeks with <0.25kg change. Requires at least 8 weight entries over 4 weeks.
+
+---
+
+#### GET /weight/meal-timing/:user_id
+Analyze meal timing for intermittent fasting (16:8) compliance.
+
+**Query Params**:
+- `days` (optional): Number of days (7, 14, or 30, default: 7)
+
+**Response** (200):
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "date": "2025-12-01",
+      "first_meal_time": "12:30",
+      "last_meal_time": "19:45",
+      "eating_window_hours": 7.25,
+      "is_16_8_compliant": true
+    },
+    {
+      "date": "2025-12-02",
+      "first_meal_time": "11:00",
+      "last_meal_time": "21:30",
+      "eating_window_hours": 10.5,
+      "is_16_8_compliant": false
+    }
+  ]
+}
+```
+
+**16:8 Compliance**: `eating_window_hours <= 8.0`
+
+---
+
 ### Health Check
 
 #### GET /status
@@ -1002,6 +1391,32 @@ For issues or questions:
 
 ---
 
-**Last Updated**: October 2025
-**Version**: 1.0
+**Last Updated**: December 2025
+**Version**: 1.1
+
+---
+
+## Recent Updates (v1.1 - December 2025)
+
+### Weight Management System
+- Added **WeightGoal**, **WeightEntry**, and **NutritionReview** models
+- Implemented complete weight tracking and nutrition analysis system
+- Added 4 new analytics endpoints:
+  - `/weight/daily-review` - Daily nutrition grading with AI feedback
+  - `/weight/weekly-summary` - Weekly aggregated statistics
+  - `/weight/plateau-check` - Plateau detection with recommendations
+  - `/weight/meal-timing` - Intermittent fasting compliance tracking
+
+### Meal Tracking Enhancement
+- Added `meal_time` field to Meal model
+- Enables accurate meal timing analysis separate from record creation time
+- Supports intermittent fasting tracking
+- Backward compatible with existing data
+
+### Documentation
+- Complete API documentation for weight management endpoints
+- Database schema documentation for new models
+- Frontend integration guides available:
+  - `FRONTEND_MEAL_TIME_INTEGRATION.md`
+  - `WEIGHT_API_IMPLEMENTATION_SUMMARY.md`
 **Author**: TracKaMate Development Team

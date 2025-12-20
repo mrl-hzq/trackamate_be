@@ -35,7 +35,7 @@ def register():
 # @cross_origin()
 def login():
     data = request.get_json()
-    # print("11111", data)
+    print("11111", data)
     user = User.query.filter_by(username=data['username']).first()
     print("22222",user)
 
